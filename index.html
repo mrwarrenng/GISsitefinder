@@ -3,7 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GIS Site Finder</title>
+    <title>EDGE Medford — Site Finder</title>
+    <meta
+      name="description"
+      content="Identify prospective development sites in Medford, Oregon based on project requirements."
+    />
     <link
       rel="stylesheet"
       href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"
@@ -11,21 +15,155 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <header class="app-header">
-      <h1>GIS Site Finder</h1>
-      <p class="subtitle">Click anywhere on the map to drop a candidate site.</p>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">EDGE</div>
+        <div class="brand-text">
+          <div class="brand-title">Medford Site Finder</div>
+          <div class="brand-sub">Economic Development · City of Medford, OR</div>
+        </div>
+      </div>
+      <nav class="topnav">
+        <a href="#" class="active">Site Finder</a>
+        <a href="https://edge.medfordoregon.gov" target="_blank" rel="noopener">EDGE Home</a>
+        <a href="https://gisapps.medfordmaps.org/mli2/" target="_blank" rel="noopener">City GIS</a>
+      </nav>
     </header>
-    <main>
-      <div id="map"></div>
-      <aside id="sidebar">
-        <h2>Sites</h2>
-        <ul id="site-list">
-          <li class="empty">No sites yet.</li>
-        </ul>
-        <button id="clear-btn" type="button">Clear all</button>
+
+    <main class="layout">
+      <aside class="panel panel-left" aria-label="Project criteria">
+        <h2 class="panel-title">Project Requirements</h2>
+        <p class="panel-hint">
+          Tell us about your project. We'll score and rank prospective sites in Medford.
+        </p>
+
+        <form id="criteria-form">
+          <fieldset>
+            <legend>Project type</legend>
+            <select id="projectType" name="projectType">
+              <option value="industrial">Industrial / Manufacturing</option>
+              <option value="logistics">Distribution / Logistics</option>
+              <option value="office">Office / R&amp;D</option>
+              <option value="retail">Retail</option>
+              <option value="mixed">Mixed-Use</option>
+              <option value="agribusiness">Agribusiness / Food Processing</option>
+            </select>
+          </fieldset>
+
+          <fieldset>
+            <legend>Lot size (acres)</legend>
+            <div class="row">
+              <label>Min<input type="number" id="minAcres" min="0" step="0.1" value="2" /></label>
+              <label>Max<input type="number" id="maxAcres" min="0" step="0.1" value="50" /></label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Acceptable zoning</legend>
+            <div class="chips" id="zoningChips">
+              <label><input type="checkbox" value="industrial" checked /><span>Industrial</span></label>
+              <label><input type="checkbox" value="commercial" checked /><span>Commercial</span></label>
+              <label><input type="checkbox" value="office" /><span>Office</span></label>
+              <label><input type="checkbox" value="mixed" /><span>Mixed-Use</span></label>
+              <label><input type="checkbox" value="agriculture" /><span>Agriculture</span></label>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="allowRezone" />
+              <span>Include parcels that could be rezoned</span>
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Maximum distance (miles)</legend>
+            <label class="slider">
+              <span>I-5 interchange</span>
+              <input type="range" id="distI5" min="0.5" max="15" step="0.5" value="3" />
+              <output for="distI5">3.0 mi</output>
+            </label>
+            <label class="slider">
+              <span>Medford Airport (MFR)</span>
+              <input type="range" id="distAirport" min="0.5" max="20" step="0.5" value="10" />
+              <output for="distAirport">10.0 mi</output>
+            </label>
+            <label class="slider">
+              <span>Rail (CORP)</span>
+              <input type="range" id="distRail" min="0.5" max="15" step="0.5" value="5" />
+              <output for="distRail">5.0 mi</output>
+            </label>
+            <label class="slider">
+              <span>Downtown</span>
+              <input type="range" id="distDowntown" min="0.5" max="15" step="0.5" value="8" />
+              <output for="distDowntown">8.0 mi</output>
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Required utilities</legend>
+            <div class="chips">
+              <label><input type="checkbox" name="util" value="water" checked /><span>Water</span></label>
+              <label><input type="checkbox" name="util" value="sewer" checked /><span>Sewer</span></label>
+              <label><input type="checkbox" name="util" value="power3" /><span>3-Phase Power</span></label>
+              <label><input type="checkbox" name="util" value="gas" /><span>Natural Gas</span></label>
+              <label><input type="checkbox" name="util" value="fiber" /><span>Fiber</span></label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Constraints</legend>
+            <label class="toggle">
+              <input type="checkbox" id="avoidFloodplain" checked />
+              <span>Avoid FEMA floodplain</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="avoidSlope" />
+              <span>Avoid steep slopes (&gt;15%)</span>
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Map overlays</legend>
+            <label class="toggle">
+              <input type="checkbox" id="overlayCity" checked />
+              <span>City limits</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="overlayZoning" />
+              <span>Zoning (live from City GIS)</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="overlayPois" checked />
+              <span>Reference points (highway, rail, airport)</span>
+            </label>
+          </fieldset>
+
+          <div class="actions">
+            <button type="button" id="resetBtn" class="btn-secondary">Reset</button>
+            <button type="submit" class="btn-primary">Score sites</button>
+          </div>
+        </form>
+      </aside>
+
+      <section class="map-wrap">
+        <div id="map"></div>
+        <div id="data-status" class="data-status" hidden></div>
+      </section>
+
+      <aside class="panel panel-right" aria-label="Results">
+        <div class="results-header">
+          <h2 class="panel-title">Top candidates</h2>
+          <span id="resultsCount" class="muted">—</span>
+        </div>
+        <ol id="results" class="results"></ol>
+        <footer class="panel-footer">
+          <p class="fineprint">
+            Candidate sites shown are <strong>illustrative</strong> for planning conversations.
+            Verify availability, ownership, and entitlement status with the City of Medford and SOREDI.
+          </p>
+        </footer>
       </aside>
     </main>
+
     <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-    <script src="./app.js"></script>
+    <script type="module" src="./app.js"></script>
   </body>
 </html>
