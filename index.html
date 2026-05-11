@@ -172,6 +172,10 @@
               <span>Zoning (live from City GIS)</span>
             </label>
             <label class="toggle">
+              <input type="checkbox" id="overlayParcels" />
+              <span>Parcels (live, zoom 13+)</span>
+            </label>
+            <label class="toggle">
               <input type="checkbox" id="overlayPois" checked />
               <span>Reference points (highway, rail, airport)</span>
             </label>
@@ -182,6 +186,10 @@
             <button type="submit" class="btn-primary">Score sites</button>
           </div>
         </form>
+
+        <button type="button" id="openEndpoints" class="link-button">
+          <span aria-hidden="true">⚙</span> Configure data sources
+        </button>
       </aside>
 
       <section class="map-wrap">
@@ -190,20 +198,64 @@
       </section>
 
       <aside class="panel panel-right" aria-label="Results">
-        <div class="results-header">
-          <h2 class="panel-title">Top Candidates</h2>
-          <span id="resultsCount" class="muted">—</span>
+        <div id="results-view">
+          <div class="results-header">
+            <h2 class="panel-title">Top Candidates</h2>
+            <span id="resultsCount" class="muted">—</span>
+          </div>
+          <ol id="results" class="results"></ol>
+          <footer class="panel-footer">
+            <p class="fineprint">
+              Candidate sites shown are <strong>illustrative</strong> for planning
+              conversations. Verify availability, ownership, and entitlement status
+              with the City of Medford and SOREDI.
+            </p>
+          </footer>
         </div>
-        <ol id="results" class="results"></ol>
-        <footer class="panel-footer">
-          <p class="fineprint">
-            Candidate sites shown are <strong>illustrative</strong> for planning
-            conversations. Verify availability, ownership, and entitlement status
-            with the City of Medford and SOREDI.
-          </p>
-        </footer>
+
+        <div id="parcel-view" hidden>
+          <button type="button" id="parcelBack" class="back-link">
+            ← Back to candidates
+          </button>
+          <h2 class="panel-title" id="parcelTitle">Parcel</h2>
+          <div class="parcel-meta" id="parcelMeta">—</div>
+
+          <dl class="parcel-attrs" id="parcelAttrs"></dl>
+
+          <details class="parcel-raw">
+            <summary>All attributes</summary>
+            <dl id="parcelAllAttrs"></dl>
+          </details>
+
+          <footer class="panel-footer">
+            <a id="parcelPdoLink" class="external" target="_blank" rel="noopener">
+              View in Jackson County PDO ↗
+            </a>
+          </footer>
+        </div>
       </aside>
     </main>
+
+    <div id="endpoints-modal" class="modal" hidden>
+      <div class="modal-card" role="dialog" aria-label="Configure data sources">
+        <header class="modal-head">
+          <div>
+            <h3>Configure data sources</h3>
+            <p class="muted">
+              Paste ArcGIS REST base URLs (without <code>/query</code>). Hit
+              <em>Test</em> to verify a service responds. Values persist on this
+              browser via <code>localStorage</code>.
+            </p>
+          </div>
+          <button type="button" id="endpoints-close" aria-label="Close">×</button>
+        </header>
+        <div id="endpoints-fields" class="endpoints-fields"></div>
+        <footer class="modal-foot">
+          <button type="button" id="endpoints-cancel" class="btn-secondary">Cancel</button>
+          <button type="button" id="endpoints-save" class="btn-primary">Save</button>
+        </footer>
+      </div>
+    </div>
 
     <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <script type="module" src="./app.js"></script>

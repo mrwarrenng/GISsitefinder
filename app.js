@@ -1,6 +1,39 @@
-import { MEDFORD, POIS, CANDIDATE_SITES, ZONING_GROUP, ARCGIS } from "./data.js";
+import {
+  MEDFORD,
+  POIS,
+  CANDIDATE_SITES,
+  ZONING_GROUP,
+  ENDPOINT_SLOTS,
+  PARCEL_FIELDS,
+  PDO_URL,
+  MOCK_PARCELS,
+} from "./data.js";
 
 const MILES_PER_KM = 0.621371;
+const PARCELS_MIN_ZOOM = 13;
+const STORAGE_KEY = "edge-medford-endpoints";
+
+// ---------- Endpoint configuration ----------
+function loadEndpoints() {
+  let stored = {};
+  try {
+    stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+  } catch (e) {
+    stored = {};
+  }
+  const out = {};
+  for (const slot of ENDPOINT_SLOTS) {
+    out[slot.key] = (stored[slot.key] ?? slot.default ?? "").trim();
+  }
+  return out;
+}
+
+function saveEndpoints(values) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(values));
+  endpoints = loadEndpoints();
+}
+
+let endpoints = loadEndpoints();
 
 // ---------- Map ----------
 const map = new maplibregl.Map({
@@ -59,7 +92,7 @@ function nearestMiles(site, points) {
   return best;
 }
 
-// ---------- Form state ----------
+// ---------- Form ----------
 const form = document.getElementById("criteria-form");
 
 function readCriteria() {
@@ -85,10 +118,10 @@ function readCriteria() {
     overlayCity: document.getElementById("overlayCity").checked,
     overlayZoning: document.getElementById("overlayZoning").checked,
     overlayPois: document.getElementById("overlayPois").checked,
+    overlayParcels: document.getElementById("overlayParcels").checked,
   };
 }
 
-// Live-update slider readouts.
 for (const slider of document.querySelectorAll(".slider input[type='range']")) {
   const out = slider.parentElement.querySelector("output");
   const sync = () => (out.textContent = Number(slider.value).toFixed(1) + " mi");
@@ -106,8 +139,6 @@ function scoreSite(site, c) {
   };
 
   const reasons = [];
-
-  // Hard filters.
   if (site.acres < c.minAcres) reasons.push(`too small (${site.acres} ac)`);
   if (site.acres > c.maxAcres) reasons.push(`too large (${site.acres} ac)`);
 
@@ -116,12 +147,9 @@ function scoreSite(site, c) {
   if (!zoningOk && !c.allowRezone) reasons.push(`zoning ${site.zoning} excluded`);
 
   if (distances.i5 > c.distI5) reasons.push(`I-5 ${distances.i5.toFixed(1)} mi`);
-  if (distances.airport > c.distAirport)
-    reasons.push(`airport ${distances.airport.toFixed(1)} mi`);
-  if (distances.rail > c.distRail)
-    reasons.push(`rail ${distances.rail.toFixed(1)} mi`);
-  if (distances.downtown > c.distDowntown)
-    reasons.push(`downtown ${distances.downtown.toFixed(1)} mi`);
+  if (distances.airport > c.distAirport) reasons.push(`airport ${distances.airport.toFixed(1)} mi`);
+  if (distances.rail > c.distRail) reasons.push(`rail ${distances.rail.toFixed(1)} mi`);
+  if (distances.downtown > c.distDowntown) reasons.push(`downtown ${distances.downtown.toFixed(1)} mi`);
 
   for (const u of c.utilitiesRequired) {
     if (!site.utilities.includes(u)) reasons.push(`no ${u}`);
@@ -129,13 +157,10 @@ function scoreSite(site, c) {
   if (c.avoidFloodplain && site.floodplain) reasons.push("in floodplain");
   if (c.avoidSlope && site.slope > 15) reasons.push("steep slope");
 
-  // Soft scoring (0-100). Each category contributes if hard filter passed.
   let score = 0;
-  // Zoning fit (20 pts; rezone-needed gets 8 pts).
   if (zoningOk) score += 20;
   else if (c.allowRezone) score += 8;
 
-  // Lot size fit within range — closer to midpoint = higher (15 pts).
   if (site.acres >= c.minAcres && site.acres <= c.maxAcres) {
     const mid = (c.minAcres + c.maxAcres) / 2;
     const span = Math.max(c.maxAcres - c.minAcres, 0.1);
@@ -143,7 +168,6 @@ function scoreSite(site, c) {
     score += 15 * (1 - Math.min(offset, 1));
   }
 
-  // Proximity scoring — exponential decay so closer is much better. (50 pts split.)
   const proxScore = (actual, max, weight) => {
     if (actual > max) return 0;
     return weight * Math.exp(-actual / Math.max(max / 2, 0.5));
@@ -153,12 +177,10 @@ function scoreSite(site, c) {
   score += proxScore(distances.rail, c.distRail, 14);
   score += proxScore(distances.downtown, c.distDowntown, 10);
 
-  // Utilities completeness (10 pts).
   const fullUtils = ["water", "sewer", "power3", "gas", "fiber"];
   const utilCount = fullUtils.filter((u) => site.utilities.includes(u)).length;
   score += (utilCount / fullUtils.length) * 10;
 
-  // Bonus: rail spur on industrial/logistics projects (5 pts).
   if ((c.projectType === "logistics" || c.projectType === "industrial") && site.hasRailSpur) {
     score += 5;
   }
@@ -173,7 +195,11 @@ function scoreSite(site, c) {
   };
 }
 
-// ---------- Map layers ----------
+// ---------- Map data ----------
+function emptyFC() {
+  return { type: "FeatureCollection", features: [] };
+}
+
 function sitesToFeatureCollection(scored) {
   return {
     type: "FeatureCollection",
@@ -207,28 +233,91 @@ function poisToFeatureCollection() {
 function ensureLayers() {
   if (map.getSource("sites")) return;
 
-  map.addSource("sites", {
-    type: "geojson",
-    data: { type: "FeatureCollection", features: [] },
+  // Parcels (rendered below sites so they're clickable underneath).
+  map.addSource("parcels", { type: "geojson", data: emptyFC() });
+  map.addLayer({
+    id: "parcels-fill",
+    type: "fill",
+    source: "parcels",
+    paint: {
+      "fill-color": "#6db4c1",
+      "fill-opacity": [
+        "case",
+        ["boolean", ["feature-state", "selected"], false], 0.35,
+        ["boolean", ["feature-state", "hover"], false], 0.12,
+        0.02,
+      ],
+    },
+    layout: { visibility: "none" },
   });
+  map.addLayer({
+    id: "parcels-line",
+    type: "line",
+    source: "parcels",
+    paint: {
+      "line-color": [
+        "case",
+        ["boolean", ["feature-state", "selected"], false], "#e8b54a",
+        "#6db4c1",
+      ],
+      "line-width": [
+        "case",
+        ["boolean", ["feature-state", "selected"], false], 2.5,
+        0.6,
+      ],
+      "line-opacity": 0.85,
+    },
+    layout: { visibility: "none" },
+  });
+
+  // Zoning (under parcels).
+  map.addSource("zoning", { type: "geojson", data: emptyFC() });
+  map.addLayer({
+    id: "zoning-fill",
+    type: "fill",
+    source: "zoning",
+    paint: { "fill-color": "#6db4c1", "fill-opacity": 0.15 },
+    layout: { visibility: "none" },
+  });
+  map.addLayer({
+    id: "zoning-line",
+    type: "line",
+    source: "zoning",
+    paint: { "line-color": "#6db4c1", "line-width": 0.5, "line-opacity": 0.5 },
+    layout: { visibility: "none" },
+  });
+
+  // City limits.
+  map.addSource("city-limits", { type: "geojson", data: emptyFC() });
+  map.addLayer({
+    id: "city-limits-line",
+    type: "line",
+    source: "city-limits",
+    paint: { "line-color": "#6db4c1", "line-width": 2, "line-dasharray": [3, 2] },
+  });
+
+  // Floodplain.
+  map.addSource("floodplain", { type: "geojson", data: emptyFC() });
+  map.addLayer({
+    id: "floodplain-fill",
+    type: "fill",
+    source: "floodplain",
+    paint: { "fill-color": "#5fa9e8", "fill-opacity": 0.18 },
+    layout: { visibility: "none" },
+  });
+
+  // Candidate sites (always on top).
+  map.addSource("sites", { type: "geojson", data: emptyFC() });
   map.addLayer({
     id: "sites-circle",
     type: "circle",
     source: "sites",
     paint: {
-      "circle-radius": [
-        "interpolate", ["linear"], ["zoom"],
-        9, 6, 14, 13,
-      ],
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 6, 14, 13],
       "circle-color": [
         "case",
         ["==", ["get", "qualifies"], false], "#5a6b80",
-        [
-          "interpolate", ["linear"], ["get", "score"],
-          0, "#c89537",
-          50, "#e8b54a",
-          80, "#7fc88a",
-        ],
+        ["interpolate", ["linear"], ["get", "score"], 0, "#c89537", 50, "#e8b54a", 80, "#7fc88a"],
       ],
       "circle-stroke-color": "#0b1c30",
       "circle-stroke-width": 2,
@@ -245,11 +334,10 @@ function ensureLayers() {
       "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
       "text-allow-overlap": true,
     },
-    paint: {
-      "text-color": "#0b1c30",
-    },
+    paint: { "text-color": "#0b1c30" },
   });
 
+  // POIs (always on top of sites for legibility).
   map.addSource("pois", { type: "geojson", data: poisToFeatureCollection() });
   map.addLayer({
     id: "pois-symbol",
@@ -287,37 +375,7 @@ function ensureLayers() {
     },
   });
 
-  // Empty placeholders for live overlays.
-  map.addSource("city-limits", { type: "geojson", data: emptyFC() });
-  map.addLayer({
-    id: "city-limits-line",
-    type: "line",
-    source: "city-limits",
-    paint: { "line-color": "#6db4c1", "line-width": 2, "line-dasharray": [3, 2] },
-  });
-
-  map.addSource("zoning", { type: "geojson", data: emptyFC() });
-  map.addLayer(
-    {
-      id: "zoning-fill",
-      type: "fill",
-      source: "zoning",
-      paint: { "fill-color": "#6db4c1", "fill-opacity": 0.15 },
-      layout: { visibility: "none" },
-    },
-    "sites-circle"
-  );
-  map.addLayer(
-    {
-      id: "zoning-line",
-      type: "line",
-      source: "zoning",
-      paint: { "line-color": "#6db4c1", "line-width": 0.6, "line-opacity": 0.55 },
-      layout: { visibility: "none" },
-    },
-    "sites-circle"
-  );
-
+  // Site clicks.
   map.on("click", "sites-circle", (e) => {
     const f = e.features[0];
     const r = scoredById.get(f.properties.id);
@@ -325,13 +383,34 @@ function ensureLayers() {
   });
   map.on("mouseenter", "sites-circle", () => (map.getCanvas().style.cursor = "pointer"));
   map.on("mouseleave", "sites-circle", () => (map.getCanvas().style.cursor = ""));
+
+  // Parcel clicks + hover.
+  let hoverId = null;
+  map.on("mousemove", "parcels-fill", (e) => {
+    if (!e.features.length) return;
+    map.getCanvas().style.cursor = "pointer";
+    const id = e.features[0].id;
+    if (hoverId !== null && hoverId !== id) {
+      map.setFeatureState({ source: "parcels", id: hoverId }, { hover: false });
+    }
+    hoverId = id;
+    if (hoverId != null) map.setFeatureState({ source: "parcels", id: hoverId }, { hover: true });
+  });
+  map.on("mouseleave", "parcels-fill", () => {
+    map.getCanvas().style.cursor = "";
+    if (hoverId !== null) {
+      map.setFeatureState({ source: "parcels", id: hoverId }, { hover: false });
+      hoverId = null;
+    }
+  });
+  map.on("click", "parcels-fill", (e) => {
+    if (!e.features.length) return;
+    const f = e.features[0];
+    selectParcel(f);
+  });
 }
 
-function emptyFC() {
-  return { type: "FeatureCollection", features: [] };
-}
-
-// ---------- Popup ----------
+// ---------- Popup (candidate sites) ----------
 let openPopup = null;
 function showPopup(r) {
   if (openPopup) openPopup.remove();
@@ -361,6 +440,81 @@ function escapeHtml(s) {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
   );
 }
+
+// ---------- Parcel detail view ----------
+let selectedParcelId = null;
+
+function findField(props, candidates) {
+  if (!props) return null;
+  for (const c of candidates) {
+    if (props[c] != null && props[c] !== "") return props[c];
+    const lc = c.toLowerCase();
+    if (props[lc] != null && props[lc] !== "") return props[lc];
+  }
+  return null;
+}
+
+function selectParcel(feature) {
+  const props = feature.properties || {};
+  const id = feature.id;
+
+  if (selectedParcelId !== null) {
+    map.setFeatureState({ source: "parcels", id: selectedParcelId }, { selected: false });
+  }
+  selectedParcelId = id;
+  if (id != null) {
+    map.setFeatureState({ source: "parcels", id }, { selected: true });
+  }
+
+  const apn = findField(props, PARCEL_FIELDS.apn) || "(unknown)";
+  const owner = findField(props, PARCEL_FIELDS.owner) || "—";
+  const acres = findField(props, PARCEL_FIELDS.acres);
+  const address = findField(props, PARCEL_FIELDS.address) || "—";
+  const zoning = findField(props, PARCEL_FIELDS.zoning) || "—";
+  const landUse = findField(props, PARCEL_FIELDS.landUse) || "—";
+  const assessedRaw = findField(props, PARCEL_FIELDS.assessedValue);
+  const yearBuilt = findField(props, PARCEL_FIELDS.yearBuilt) || "—";
+
+  const acresStr = acres != null ? `${Number(acres).toFixed(2)} ac` : "—";
+  const assessed =
+    assessedRaw != null
+      ? `$${Number(assessedRaw).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+      : "—";
+
+  document.getElementById("parcelTitle").textContent = `Parcel ${apn}`;
+  document.getElementById("parcelMeta").textContent = address;
+  document.getElementById("parcelAttrs").innerHTML = `
+    <div><dt>Owner</dt><dd>${escapeHtml(String(owner))}</dd></div>
+    <div><dt>Acres</dt><dd>${escapeHtml(acresStr)}</dd></div>
+    <div><dt>Zoning</dt><dd>${escapeHtml(String(zoning))}</dd></div>
+    <div><dt>Land Use</dt><dd>${escapeHtml(String(landUse))}</dd></div>
+    <div><dt>Assessed</dt><dd>${escapeHtml(assessed)}</dd></div>
+    <div><dt>Year Built</dt><dd>${escapeHtml(String(yearBuilt))}</dd></div>
+  `;
+
+  const allAttrs = Object.entries(props)
+    .filter(([, v]) => v != null && v !== "")
+    .map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(String(v))}</dd></div>`)
+    .join("");
+  document.getElementById("parcelAllAttrs").innerHTML = allAttrs || "<em>No additional attributes.</em>";
+
+  document.getElementById("parcelPdoLink").href = PDO_URL;
+
+  switchRightPanel("parcel");
+}
+
+function switchRightPanel(view) {
+  document.getElementById("results-view").hidden = view !== "results";
+  document.getElementById("parcel-view").hidden = view !== "parcel";
+}
+
+document.getElementById("parcelBack").addEventListener("click", () => {
+  switchRightPanel("results");
+  if (selectedParcelId !== null) {
+    map.setFeatureState({ source: "parcels", id: selectedParcelId }, { selected: false });
+    selectedParcelId = null;
+  }
+});
 
 // ---------- Results ----------
 let scoredById = new Map();
@@ -427,33 +581,126 @@ function applyOverlayVisibility(c) {
   map.setLayoutProperty("city-limits-line", "visibility", c.overlayCity ? "visible" : "none");
   map.setLayoutProperty("zoning-fill", "visibility", c.overlayZoning ? "visible" : "none");
   map.setLayoutProperty("zoning-line", "visibility", c.overlayZoning ? "visible" : "none");
+  map.setLayoutProperty("parcels-fill", "visibility", c.overlayParcels ? "visible" : "none");
+  map.setLayoutProperty("parcels-line", "visibility", c.overlayParcels ? "visible" : "none");
 
-  if (c.overlayCity) loadOverlay("city-limits", ARCGIS.cityLimits);
-  if (c.overlayZoning) loadOverlay("zoning", ARCGIS.zoning);
+  if (c.overlayCity) loadStaticOverlay("city-limits", endpoints.cityLimits);
+  if (c.overlayZoning) loadStaticOverlay("zoning", endpoints.zoning);
+  if (c.overlayParcels) loadParcelsInView();
+  else clearParcelsState();
 }
 
-// ---------- ArcGIS overlays ----------
+function clearParcelsState() {
+  if (selectedParcelId !== null) {
+    try { map.setFeatureState({ source: "parcels", id: selectedParcelId }, { selected: false }); } catch (e) {}
+    selectedParcelId = null;
+  }
+  switchRightPanel("results");
+}
+
+// ---------- ArcGIS query helpers ----------
+function arcgisQueryUrl(base, params) {
+  if (!base) return null;
+  const trimmed = base.replace(/\/$/, "");
+  const defaults = {
+    where: "1=1",
+    outFields: "*",
+    outSR: "4326",
+    f: "geojson",
+    returnGeometry: "true",
+  };
+  const merged = { ...defaults, ...params };
+  const qs = new URLSearchParams(merged).toString();
+  return `${trimmed}/query?${qs}`;
+}
+
+// Static overlays load once.
 const overlayLoaded = new Set();
-async function loadOverlay(sourceId, url) {
+async function loadStaticOverlay(sourceId, baseUrl) {
+  if (!baseUrl) {
+    setStatus(`No endpoint configured for ${sourceId}. Open Data sources to set one.`, true);
+    return;
+  }
   if (overlayLoaded.has(sourceId)) return;
   overlayLoaded.add(sourceId);
+  const url = arcgisQueryUrl(baseUrl, {});
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error("HTTP " + res.status);
     const gj = await res.json();
     if (!gj || !gj.features) throw new Error("not GeoJSON");
     map.getSource(sourceId).setData(gj);
-    setStatus(`Loaded ${gj.features.length} features for ${sourceId}.`);
+    setStatus(`Loaded ${gj.features.length} ${sourceId} features.`);
   } catch (err) {
     overlayLoaded.delete(sourceId);
-    setStatus(
-      `Couldn't load live ${sourceId} from City GIS (${err.message}). ` +
-        `Update ARCGIS.${sourceId === "city-limits" ? "cityLimits" : "zoning"} in data.js with the correct endpoint.`,
-      true
-    );
+    setStatus(`Couldn't load ${sourceId} (${err.message}). Open Data sources to fix.`, true);
   }
 }
 
+// Parcels: viewport-bounded, throttled.
+let parcelsInflight;
+let lastParcelKey = "";
+let parcelsTimer;
+
+function loadParcelsInView() {
+  clearTimeout(parcelsTimer);
+  parcelsTimer = setTimeout(loadParcelsNow, 250);
+}
+
+async function loadParcelsNow() {
+  if (!endpoints.parcels) {
+    // Fall back to mock parcels so click-to-inspect still works.
+    map.getSource("parcels").setData(MOCK_PARCELS);
+    setStatus("Showing mock parcels. Configure a live endpoint in Data sources.");
+    return;
+  }
+  if (map.getZoom() < PARCELS_MIN_ZOOM) {
+    map.getSource("parcels").setData(emptyFC());
+    setStatus(`Zoom in to level ${PARCELS_MIN_ZOOM} to load parcels.`);
+    return;
+  }
+  const b = map.getBounds();
+  const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+  const key = bbox.map((n) => n.toFixed(4)).join(",");
+  if (key === lastParcelKey) return;
+  lastParcelKey = key;
+
+  if (parcelsInflight) parcelsInflight.abort();
+  parcelsInflight = new AbortController();
+
+  const url = arcgisQueryUrl(endpoints.parcels, {
+    geometry: bbox.join(","),
+    geometryType: "esriGeometryEnvelope",
+    inSR: "4326",
+    spatialRel: "esriSpatialRelIntersects",
+    resultRecordCount: "2000",
+  });
+  try {
+    const res = await fetch(url, { signal: parcelsInflight.signal });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const gj = await res.json();
+    if (!gj || !gj.features) throw new Error("response not GeoJSON");
+
+    // Assign stable feature IDs for feature-state.
+    gj.features.forEach((f, i) => {
+      const props = f.properties || {};
+      const apn = findField(props, PARCEL_FIELDS.apn);
+      f.id = apn ? `${apn}` : i + 1;
+    });
+    map.getSource("parcels").setData(gj);
+    setStatus(`${gj.features.length} parcels in view.`);
+  } catch (err) {
+    if (err.name === "AbortError") return;
+    map.getSource("parcels").setData(MOCK_PARCELS);
+    setStatus(`Parcel query failed (${err.message}). Showing mock parcels.`, true);
+  }
+}
+
+map.on("moveend", () => {
+  if (document.getElementById("overlayParcels").checked) loadParcelsInView();
+});
+
+// ---------- Status banner ----------
 const statusEl = document.getElementById("data-status");
 let statusTimer;
 function setStatus(text, persistent = false) {
@@ -463,7 +710,90 @@ function setStatus(text, persistent = false) {
   if (!persistent) statusTimer = setTimeout(() => (statusEl.hidden = true), 6000);
 }
 
-// ---------- Wire form ----------
+// ---------- Data sources modal ----------
+const modal = document.getElementById("endpoints-modal");
+const modalBody = document.getElementById("endpoints-fields");
+
+function openEndpointsModal() {
+  modalBody.innerHTML = ENDPOINT_SLOTS.map((slot) => {
+    const v = endpoints[slot.key] || "";
+    return `
+      <label class="endpoint-row">
+        <div class="endpoint-label">
+          <span>${escapeHtml(slot.label)}</span>
+          <small>${escapeHtml(slot.hint)}</small>
+        </div>
+        <input
+          type="url"
+          data-key="${slot.key}"
+          value="${escapeHtml(v)}"
+          placeholder="${escapeHtml(slot.placeholder)}"
+        />
+        <button type="button" class="btn-test" data-key="${slot.key}">Test</button>
+        <span class="endpoint-status" data-key="${slot.key}"></span>
+      </label>
+    `;
+  }).join("");
+  modal.hidden = false;
+
+  modalBody.querySelectorAll(".btn-test").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const key = btn.dataset.key;
+      const input = modalBody.querySelector(`input[data-key="${key}"]`);
+      const status = modalBody.querySelector(`.endpoint-status[data-key="${key}"]`);
+      const url = input.value.trim();
+      if (!url) {
+        status.textContent = "empty";
+        status.className = "endpoint-status warn";
+        return;
+      }
+      status.textContent = "testing…";
+      status.className = "endpoint-status";
+      try {
+        const countUrl = arcgisQueryUrl(url, { returnCountOnly: "true", f: "json" });
+        const res = await fetch(countUrl);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const json = await res.json();
+        if (json.count != null) {
+          status.textContent = `${json.count.toLocaleString()} features`;
+          status.className = "endpoint-status ok";
+        } else if (json.error) {
+          throw new Error(json.error.message || "service error");
+        } else {
+          status.textContent = "responded";
+          status.className = "endpoint-status ok";
+        }
+      } catch (err) {
+        status.textContent = err.message;
+        status.className = "endpoint-status bad";
+      }
+    });
+  });
+}
+
+function closeEndpointsModal() {
+  modal.hidden = true;
+}
+
+document.getElementById("openEndpoints").addEventListener("click", openEndpointsModal);
+document.getElementById("endpoints-close").addEventListener("click", closeEndpointsModal);
+document.getElementById("endpoints-cancel").addEventListener("click", closeEndpointsModal);
+modal.addEventListener("click", (e) => { if (e.target === modal) closeEndpointsModal(); });
+
+document.getElementById("endpoints-save").addEventListener("click", () => {
+  const values = {};
+  modalBody.querySelectorAll("input[data-key]").forEach((input) => {
+    values[input.dataset.key] = input.value.trim();
+  });
+  saveEndpoints(values);
+  overlayLoaded.clear();
+  lastParcelKey = "";
+  closeEndpointsModal();
+  run();
+  setStatus("Endpoints saved.");
+});
+
+// ---------- Form wiring ----------
 form.addEventListener("submit", (e) => {
   e.preventDefault();
   run();
@@ -477,10 +807,8 @@ document.getElementById("resetBtn").addEventListener("click", () => {
   run();
 });
 
-// Re-run scoring on any change (so sliders feel live).
 form.addEventListener("change", () => run());
 
-// Initial render once map loads.
 map.on("load", () => {
   ensureLayers();
   run();
