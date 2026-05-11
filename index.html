@@ -3,10 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EDGE Medford — Site Finder</title>
+    <title>Site Selector — EDGE Medford</title>
     <meta
       name="description"
-      content="Identify prospective development sites in Medford, Oregon based on project requirements."
+      content="Identify prospective development sites in Medford, Oregon based on your project requirements."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,700;1,9..144,500;1,9..144,700&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
     />
     <link
       rel="stylesheet"
@@ -16,25 +22,60 @@
   </head>
   <body>
     <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark">EDGE</div>
-        <div class="brand-text">
-          <div class="brand-title">Medford Site Finder</div>
-          <div class="brand-sub">Economic Development · City of Medford, OR</div>
-        </div>
-      </div>
-      <nav class="topnav">
-        <a href="#" class="active">Site Finder</a>
-        <a href="https://edge.medfordoregon.gov" target="_blank" rel="noopener">EDGE Home</a>
-        <a href="https://gisapps.medfordmaps.org/mli2/" target="_blank" rel="noopener">City GIS</a>
+      <a class="brand" href="https://edge.medfordoregon.gov" rel="noopener">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="42" height="42">
+            <defs>
+              <radialGradient id="bg-m" cx="35%" cy="30%" r="80%">
+                <stop offset="0%" stop-color="#2a7e8d" />
+                <stop offset="100%" stop-color="#0e3942" />
+              </radialGradient>
+            </defs>
+            <circle cx="24" cy="24" r="22" fill="url(#bg-m)" stroke="rgba(159,200,210,0.35)" stroke-width="1" />
+            <text
+              x="24" y="33" text-anchor="middle"
+              font-family="Fraunces, Georgia, serif" font-style="italic"
+              font-weight="700" font-size="28" fill="#f1ece1"
+            >M</text>
+          </svg>
+        </span>
+        <span class="brand-text">
+          <span class="brand-name">MEDFORD</span>
+          <span class="brand-sub">ECONOMIC DEVELOPMENT</span>
+        </span>
+      </a>
+
+      <nav class="topnav" aria-label="Primary">
+        <a href="https://edge.medfordoregon.gov">Home</a>
+        <a href="https://edge.medfordoregon.gov/why-medford">Why Medford</a>
+        <a href="https://edge.medfordoregon.gov/start">Start a Business</a>
+        <a href="https://edge.medfordoregon.gov/grow">Grow Your Business</a>
+        <a href="#" class="active">Site Selector</a>
+        <a href="https://edge.medfordoregon.gov/contact">Contact</a>
       </nav>
+
+      <a class="cta-pill" href="https://www.medfordoregon.gov" rel="noopener">
+        medfordoregon.gov
+      </a>
     </header>
+
+    <section class="hero">
+      <div class="hero-eyebrow"><span>MEDFORD OREGON</span></div>
+      <h1 class="hero-title">
+        Where Your Project <em>Takes Shape.</em>
+      </h1>
+      <p class="hero-lede">
+        Tell us about your project. We'll surface the Medford sites that fit —
+        scored against zoning, size, utilities, and proximity to the I-5
+        corridor, the airport, and rail.
+      </p>
+    </section>
 
     <main class="layout">
       <aside class="panel panel-left" aria-label="Project criteria">
         <h2 class="panel-title">Project Requirements</h2>
         <p class="panel-hint">
-          Tell us about your project. We'll score and rank prospective sites in Medford.
+          Adjust the criteria to re-rank the candidate sites in real time.
         </p>
 
         <form id="criteria-form">
@@ -150,14 +191,15 @@
 
       <aside class="panel panel-right" aria-label="Results">
         <div class="results-header">
-          <h2 class="panel-title">Top candidates</h2>
+          <h2 class="panel-title">Top Candidates</h2>
           <span id="resultsCount" class="muted">—</span>
         </div>
         <ol id="results" class="results"></ol>
         <footer class="panel-footer">
           <p class="fineprint">
-            Candidate sites shown are <strong>illustrative</strong> for planning conversations.
-            Verify availability, ownership, and entitlement status with the City of Medford and SOREDI.
+            Candidate sites shown are <strong>illustrative</strong> for planning
+            conversations. Verify availability, ownership, and entitlement status
+            with the City of Medford and SOREDI.
           </p>
         </footer>
       </aside>

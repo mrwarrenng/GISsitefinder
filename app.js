@@ -9,16 +9,21 @@ const map = new maplibregl.Map({
     version: 8,
     glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
     sources: {
-      osm: {
+      basemap: {
         type: "raster",
-        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        tiles: [
+          "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+          "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+          "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+          "https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+        ],
         tileSize: 256,
         maxzoom: 19,
         attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
       },
     },
-    layers: [{ id: "osm", type: "raster", source: "osm" }],
+    layers: [{ id: "basemap", type: "raster", source: "basemap" }],
   },
   center: MEDFORD.center,
   zoom: MEDFORD.zoom,
@@ -213,19 +218,19 @@ function ensureLayers() {
     paint: {
       "circle-radius": [
         "interpolate", ["linear"], ["zoom"],
-        9, 5, 14, 11,
+        9, 6, 14, 13,
       ],
       "circle-color": [
         "case",
-        ["==", ["get", "qualifies"], false], "#9aa3b2",
+        ["==", ["get", "qualifies"], false], "#5a6b80",
         [
           "interpolate", ["linear"], ["get", "score"],
-          0, "#d9b27a",
-          50, "#b8722a",
-          80, "#2e7d32",
+          0, "#c89537",
+          50, "#e8b54a",
+          80, "#7fc88a",
         ],
       ],
-      "circle-stroke-color": "#fff",
+      "circle-stroke-color": "#0b1c30",
       "circle-stroke-width": 2,
       "circle-opacity": 0.95,
     },
@@ -241,7 +246,7 @@ function ensureLayers() {
       "text-allow-overlap": true,
     },
     paint: {
-      "text-color": "#fff",
+      "text-color": "#0b1c30",
     },
   });
 
@@ -254,13 +259,13 @@ function ensureLayers() {
       "circle-radius": 5,
       "circle-color": [
         "match", ["get", "kind"],
-        "airport", "#1f6f7a",
-        "downtown", "#0a2540",
-        "i5", "#b3261e",
-        "rail", "#5b3b8c",
-        "#666",
+        "airport", "#6db4c1",
+        "downtown", "#f1ece1",
+        "i5", "#e8b54a",
+        "rail", "#b48cc9",
+        "#8ea4bc",
       ],
-      "circle-stroke-color": "#fff",
+      "circle-stroke-color": "#0b1c30",
       "circle-stroke-width": 1.5,
     },
   });
@@ -276,8 +281,8 @@ function ensureLayers() {
       "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"],
     },
     paint: {
-      "text-color": "#0a2540",
-      "text-halo-color": "#fff",
+      "text-color": "#d8d2c2",
+      "text-halo-color": "#0b1c30",
       "text-halo-width": 1.5,
     },
   });
@@ -288,7 +293,7 @@ function ensureLayers() {
     id: "city-limits-line",
     type: "line",
     source: "city-limits",
-    paint: { "line-color": "#0a2540", "line-width": 2, "line-dasharray": [3, 2] },
+    paint: { "line-color": "#6db4c1", "line-width": 2, "line-dasharray": [3, 2] },
   });
 
   map.addSource("zoning", { type: "geojson", data: emptyFC() });
@@ -297,7 +302,7 @@ function ensureLayers() {
       id: "zoning-fill",
       type: "fill",
       source: "zoning",
-      paint: { "fill-color": "#1f6f7a", "fill-opacity": 0.18 },
+      paint: { "fill-color": "#6db4c1", "fill-opacity": 0.15 },
       layout: { visibility: "none" },
     },
     "sites-circle"
@@ -307,7 +312,7 @@ function ensureLayers() {
       id: "zoning-line",
       type: "line",
       source: "zoning",
-      paint: { "line-color": "#1f6f7a", "line-width": 0.5, "line-opacity": 0.6 },
+      paint: { "line-color": "#6db4c1", "line-width": 0.6, "line-opacity": 0.55 },
       layout: { visibility: "none" },
     },
     "sites-circle"
