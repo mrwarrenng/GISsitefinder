@@ -405,8 +405,24 @@ input[type="range"] {
   padding: 0.55rem 0.75rem;
   font-size: 0.78rem;
   box-shadow: var(--shadow);
-  max-width: 340px;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
 }
+
+.status-link {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.status-link:hover { background: rgba(232, 181, 74, 0.12); }
 
 .basemap-toggle {
   position: absolute;

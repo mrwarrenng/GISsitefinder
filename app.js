@@ -104,7 +104,9 @@ function setBasemap(key) {
   if (src && typeof src.setTiles === "function") {
     src.setTiles(b.tiles);
   } else {
-    // Fallback: rebuild the source.
+    // Fallback: rebuild the source. Insert BELOW the first non-basemap layer
+    // so overlays stay on top.
+    const layers = map.getStyle().layers.filter((l) => l.id !== "basemap");
     map.removeLayer("basemap");
     map.removeSource("basemap");
     map.addSource("basemap", {
@@ -114,7 +116,7 @@ function setBasemap(key) {
       maxzoom: 19,
       attribution: b.attribution || "&copy; OpenStreetMap contributors &copy; CARTO",
     });
-    map.addLayer({ id: "basemap", type: "raster", source: "basemap" }, map.getStyle().layers[1]?.id);
+    map.addLayer({ id: "basemap", type: "raster", source: "basemap" }, layers[0]?.id);
   }
   document.querySelectorAll("[data-basemap]").forEach((el) => {
     el.classList.toggle("active", el.dataset.basemap === key);
@@ -685,6 +687,27 @@ function arcgisQueryUrl(base, params) {
 
 // Static overlays load once.
 const overlayLoaded = new Set();
+
+function fcBounds(fc) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const consume = (coords) => {
+    if (typeof coords[0] === "number") {
+      const [x, y] = coords;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    } else {
+      for (const c of coords) consume(c);
+    }
+  };
+  for (const f of fc.features) {
+    if (f.geometry) consume(f.geometry.coordinates);
+  }
+  if (!isFinite(minX)) return null;
+  return [minX, minY, maxX, maxY];
+}
+
 async function loadStaticOverlay(sourceId, baseUrl) {
   if (!baseUrl) {
     setStatus(`No endpoint configured for ${sourceId}. Open Data sources to set one.`, true);
@@ -697,9 +720,32 @@ async function loadStaticOverlay(sourceId, baseUrl) {
     const res = await fetch(url);
     if (!res.ok) throw new Error("HTTP " + res.status);
     const gj = await res.json();
-    if (!gj || !gj.features) throw new Error("not GeoJSON");
+    if (gj.error) throw new Error(gj.error.message || "service error");
+    if (gj.type !== "FeatureCollection") {
+      throw new Error("response is not GeoJSON (got " + (gj.type || "esri json?") + ")");
+    }
+    if (!gj.features || !gj.features.length) {
+      throw new Error("0 features (try a different layer index)");
+    }
     map.getSource(sourceId).setData(gj);
-    setStatus(`Loaded ${gj.features.length} ${sourceId} features.`);
+    const bbox = fcBounds(gj);
+    const bboxText = bbox
+      ? `bbox ${bbox[0].toFixed(3)},${bbox[1].toFixed(3)} → ${bbox[2].toFixed(3)},${bbox[3].toFixed(3)}`
+      : "no geometry";
+    const looksWGS84 = bbox && bbox[0] > -180 && bbox[0] < 180 && bbox[1] > -90 && bbox[1] < 90;
+    if (!looksWGS84 && bbox) {
+      setStatus(
+        `${sourceId}: ${gj.features.length} features loaded but coords look projected (${bboxText}). Service may not honor outSR=4326.`,
+        true,
+        { bbox, label: sourceId }
+      );
+    } else {
+      setStatus(
+        `${sourceId}: ${gj.features.length} features loaded · ${bboxText}`,
+        true,
+        { bbox, label: sourceId }
+      );
+    }
   } catch (err) {
     overlayLoaded.delete(sourceId);
     setStatus(`Couldn't load ${sourceId} (${err.message}). Open Data sources to fix.`, true);
@@ -748,7 +794,10 @@ async function loadParcelsNow() {
     const res = await fetch(url, { signal: parcelsInflight.signal });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const gj = await res.json();
-    if (!gj || !gj.features) throw new Error("response not GeoJSON");
+    if (gj.error) throw new Error(gj.error.message || "service error");
+    if (gj.type !== "FeatureCollection") {
+      throw new Error("response is not GeoJSON (got " + (gj.type || "esri json?") + ")");
+    }
 
     // Assign stable feature IDs for feature-state.
     gj.features.forEach((f, i) => {
@@ -757,7 +806,11 @@ async function loadParcelsNow() {
       f.id = apn ? `${apn}` : i + 1;
     });
     map.getSource("parcels").setData(gj);
-    setStatus(`${gj.features.length} parcels in view.`);
+    const bbox = fcBounds(gj);
+    const bboxText = bbox
+      ? `bbox ${bbox[0].toFixed(3)},${bbox[1].toFixed(3)} → ${bbox[2].toFixed(3)},${bbox[3].toFixed(3)}`
+      : "no geometry";
+    setStatus(`${gj.features.length} parcels in view · ${bboxText}`, true, { bbox, label: "parcels" });
   } catch (err) {
     if (err.name === "AbortError") return;
     map.getSource("parcels").setData(MOCK_PARCELS);
@@ -772,8 +825,30 @@ map.on("moveend", () => {
 // ---------- Status banner ----------
 const statusEl = document.getElementById("data-status");
 let statusTimer;
-function setStatus(text, persistent = false) {
-  statusEl.textContent = text;
+let lastLoadedBbox = null;
+let lastLoadedLabel = null;
+function setStatus(text, persistent = false, opts = {}) {
+  statusEl.innerHTML = "";
+  const span = document.createElement("span");
+  span.textContent = text;
+  statusEl.appendChild(span);
+  if (opts.bbox) {
+    lastLoadedBbox = opts.bbox;
+    lastLoadedLabel = opts.label || "layer";
+    const link = document.createElement("button");
+    link.type = "button";
+    link.className = "status-link";
+    link.textContent = "Zoom to data ↗";
+    link.addEventListener("click", () => {
+      const [w, s, e, n] = opts.bbox;
+      if (isFinite(w) && Math.abs(w) <= 180 && Math.abs(n) <= 90) {
+        map.fitBounds([[w, s], [e, n]], { padding: 60, duration: 800 });
+      } else {
+        setStatus(`Bbox is projected; can't zoom: ${w.toFixed(0)},${s.toFixed(0)} → ${e.toFixed(0)},${n.toFixed(0)}`, true);
+      }
+    });
+    statusEl.appendChild(link);
+  }
   statusEl.hidden = false;
   clearTimeout(statusTimer);
   if (!persistent) statusTimer = setTimeout(() => (statusEl.hidden = true), 6000);
