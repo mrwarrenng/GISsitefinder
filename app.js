@@ -23,7 +23,9 @@ function loadEndpoints() {
   }
   const out = {};
   for (const slot of ENDPOINT_SLOTS) {
-    out[slot.key] = (stored[slot.key] ?? slot.default ?? "").trim();
+    // Falsy check so empty strings from older versions fall back to defaults.
+    const v = (stored[slot.key] || "").trim();
+    out[slot.key] = v || (slot.default || "").trim();
   }
   return out;
 }

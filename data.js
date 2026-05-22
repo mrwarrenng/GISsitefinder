@@ -104,10 +104,11 @@ export const CANDIDATE_SITES = [
 export const ENDPOINT_SLOTS = [
   {
     key: "parcels",
-    label: "Parcels (Jackson Co. or Medford)",
-    placeholder: "https://gis.jacksoncountyor.org/arcgis/rest/services/.../FeatureServer/0",
-    default: "",
-    hint: "Parcel/taxlot polygons. Minimum zoom 13 to query. Falls back to mock parcels.",
+    label: "Parcels (Taxlots)",
+    placeholder: "https://maps.medfordmaps.org/arcgis/rest/services/.../FeatureServer/0",
+    default:
+      "https://maps.medfordmaps.org/arcgis/rest/services/Public/Taxlots_with_SiteAddresses_Service/FeatureServer/0",
+    hint: "Taxlot polygons with site addresses. Minimum zoom 13 to query.",
   },
   {
     key: "cityLimits",
@@ -115,29 +116,30 @@ export const ENDPOINT_SLOTS = [
     placeholder: "https://maps.medfordmaps.org/arcgis/rest/services/.../FeatureServer/0",
     default:
       "https://maps.medfordmaps.org/arcgis/rest/services/Public/AdministrativeBoundary_Service/FeatureServer/0",
-    hint: "Medford city boundary polygon.",
+    hint: "Administrative boundary polygons (city limits, UGB).",
   },
   {
     key: "zoning",
-    label: "Zoning",
+    label: "Zoning / Land Use",
     placeholder: "https://maps.medfordmaps.org/arcgis/rest/services/.../FeatureServer/0",
     default:
-      "https://maps.medfordmaps.org/arcgis/rest/services/Public/PlanningZoning_Service/FeatureServer/0",
-    hint: "Current zoning districts.",
+      "https://maps.medfordmaps.org/arcgis/rest/services/Public/LandUsePlanning_Service/FeatureServer/0",
+    hint: "Land use planning / zoning districts. Try layer indices /0, /1, /2 if /0 isn't zoning.",
   },
   {
     key: "floodplain",
     label: "FEMA Floodplain",
     placeholder: "https://maps.medfordmaps.org/arcgis/rest/services/.../MapServer/0",
-    default: "",
-    hint: "FEMA NFHL or local floodplain layer.",
+    default:
+      "https://maps.medfordmaps.org/arcgis/rest/services/Public/FEMA_Service/MapServer/0",
+    hint: "FEMA flood hazard areas (NFHL).",
   },
   {
     key: "trafficCounts",
     label: "Traffic Counts (ADT)",
-    placeholder: "https://maps.medfordmaps.org/arcgis/rest/services/.../FeatureServer/0",
+    placeholder: "https://maps.medfordmaps.org/arcgis/rest/services/Public/Transportation_Service/FeatureServer/N",
     default: "",
-    hint: "Point or line layer with average daily traffic counts.",
+    hint: "Search Transportation_Service layers for ADT/traffic count. Layer index varies.",
   },
 ];
 
