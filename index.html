@@ -3,7 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GIS Site Finder</title>
+    <title>Site Selector — EDGE Medford</title>
+    <meta
+      name="description"
+      content="Identify prospective development sites in Medford, Oregon based on your project requirements."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,700;1,9..144,500;1,9..144,700&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <link
       rel="stylesheet"
       href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"
@@ -11,21 +21,243 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <header class="app-header">
-      <h1>GIS Site Finder</h1>
-      <p class="subtitle">Click anywhere on the map to drop a candidate site.</p>
+    <header class="topbar">
+      <a class="brand" href="https://edge.medfordoregon.gov" rel="noopener">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="42" height="42">
+            <defs>
+              <radialGradient id="bg-m" cx="35%" cy="30%" r="80%">
+                <stop offset="0%" stop-color="#2a7e8d" />
+                <stop offset="100%" stop-color="#0e3942" />
+              </radialGradient>
+            </defs>
+            <circle cx="24" cy="24" r="22" fill="url(#bg-m)" stroke="rgba(159,200,210,0.35)" stroke-width="1" />
+            <text
+              x="24" y="33" text-anchor="middle"
+              font-family="Fraunces, Georgia, serif" font-style="italic"
+              font-weight="700" font-size="28" fill="#f1ece1"
+            >M</text>
+          </svg>
+        </span>
+        <span class="brand-text">
+          <span class="brand-name">MEDFORD</span>
+          <span class="brand-sub">ECONOMIC DEVELOPMENT</span>
+        </span>
+      </a>
+
+      <nav class="topnav" aria-label="Primary">
+        <a href="https://edge.medfordoregon.gov">Home</a>
+        <a href="https://edge.medfordoregon.gov/why-medford">Why Medford</a>
+        <a href="https://edge.medfordoregon.gov/start">Start a Business</a>
+        <a href="https://edge.medfordoregon.gov/grow">Grow Your Business</a>
+        <a href="#" class="active">Site Selector</a>
+        <a href="https://edge.medfordoregon.gov/contact">Contact</a>
+      </nav>
+
+      <a class="cta-pill" href="https://www.medfordoregon.gov" rel="noopener">
+        medfordoregon.gov
+      </a>
     </header>
-    <main>
-      <div id="map"></div>
-      <aside id="sidebar">
-        <h2>Sites</h2>
-        <ul id="site-list">
-          <li class="empty">No sites yet.</li>
-        </ul>
-        <button id="clear-btn" type="button">Clear all</button>
+
+    <section class="hero">
+      <div class="hero-eyebrow"><span>MEDFORD OREGON</span></div>
+      <h1 class="hero-title">
+        Where Your Project <em>Takes Shape.</em>
+      </h1>
+      <p class="hero-lede">
+        Tell us about your project. We'll surface the Medford sites that fit —
+        scored against zoning, size, utilities, and proximity to the I-5
+        corridor, the airport, and rail.
+      </p>
+    </section>
+
+    <main class="layout">
+      <aside class="panel panel-left" aria-label="Project criteria">
+        <h2 class="panel-title">Project Requirements</h2>
+        <p class="panel-hint">
+          Adjust the criteria to re-rank the candidate sites in real time.
+        </p>
+
+        <form id="criteria-form">
+          <fieldset>
+            <legend>Project type</legend>
+            <select id="projectType" name="projectType">
+              <option value="industrial">Industrial / Manufacturing</option>
+              <option value="logistics">Distribution / Logistics</option>
+              <option value="office">Office / R&amp;D</option>
+              <option value="retail">Retail</option>
+              <option value="mixed">Mixed-Use</option>
+              <option value="agribusiness">Agribusiness / Food Processing</option>
+            </select>
+          </fieldset>
+
+          <fieldset>
+            <legend>Lot size (acres)</legend>
+            <div class="row">
+              <label>Min<input type="number" id="minAcres" min="0" step="0.1" value="2" /></label>
+              <label>Max<input type="number" id="maxAcres" min="0" step="0.1" value="50" /></label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Acceptable zoning</legend>
+            <div class="chips" id="zoningChips">
+              <label><input type="checkbox" value="industrial" checked /><span>Industrial</span></label>
+              <label><input type="checkbox" value="commercial" checked /><span>Commercial</span></label>
+              <label><input type="checkbox" value="office" /><span>Office</span></label>
+              <label><input type="checkbox" value="mixed" /><span>Mixed-Use</span></label>
+              <label><input type="checkbox" value="agriculture" /><span>Agriculture</span></label>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="allowRezone" />
+              <span>Include parcels that could be rezoned</span>
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Maximum distance (miles)</legend>
+            <label class="slider">
+              <span>I-5 interchange</span>
+              <input type="range" id="distI5" min="0.5" max="15" step="0.5" value="3" />
+              <output for="distI5">3.0 mi</output>
+            </label>
+            <label class="slider">
+              <span>Medford Airport (MFR)</span>
+              <input type="range" id="distAirport" min="0.5" max="20" step="0.5" value="10" />
+              <output for="distAirport">10.0 mi</output>
+            </label>
+            <label class="slider">
+              <span>Rail (CORP)</span>
+              <input type="range" id="distRail" min="0.5" max="15" step="0.5" value="5" />
+              <output for="distRail">5.0 mi</output>
+            </label>
+            <label class="slider">
+              <span>Downtown</span>
+              <input type="range" id="distDowntown" min="0.5" max="15" step="0.5" value="8" />
+              <output for="distDowntown">8.0 mi</output>
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Required utilities</legend>
+            <div class="chips">
+              <label><input type="checkbox" name="util" value="water" checked /><span>Water</span></label>
+              <label><input type="checkbox" name="util" value="sewer" checked /><span>Sewer</span></label>
+              <label><input type="checkbox" name="util" value="power3" /><span>3-Phase Power</span></label>
+              <label><input type="checkbox" name="util" value="gas" /><span>Natural Gas</span></label>
+              <label><input type="checkbox" name="util" value="fiber" /><span>Fiber</span></label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Constraints</legend>
+            <label class="toggle">
+              <input type="checkbox" id="avoidFloodplain" checked />
+              <span>Avoid FEMA floodplain</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="avoidSlope" />
+              <span>Avoid steep slopes (&gt;15%)</span>
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Map overlays</legend>
+            <label class="toggle">
+              <input type="checkbox" id="overlayCity" checked />
+              <span>City limits</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="overlayZoning" />
+              <span>Zoning (live from City GIS)</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="overlayParcels" />
+              <span>Parcels (live, zoom 13+)</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="overlayPois" checked />
+              <span>Reference points (highway, rail, airport)</span>
+            </label>
+          </fieldset>
+
+          <div class="actions">
+            <button type="button" id="resetBtn" class="btn-secondary">Reset</button>
+            <button type="submit" class="btn-primary">Score sites</button>
+          </div>
+        </form>
+
+        <button type="button" id="openEndpoints" class="link-button">
+          <span aria-hidden="true">⚙</span> Configure data sources
+        </button>
+      </aside>
+
+      <section class="map-wrap">
+        <div id="map"></div>
+        <div id="data-status" class="data-status" hidden></div>
+      </section>
+
+      <aside class="panel panel-right" aria-label="Results">
+        <div id="results-view">
+          <div class="results-header">
+            <h2 class="panel-title">Top Candidates</h2>
+            <span id="resultsCount" class="muted">—</span>
+          </div>
+          <ol id="results" class="results"></ol>
+          <footer class="panel-footer">
+            <p class="fineprint">
+              Candidate sites shown are <strong>illustrative</strong> for planning
+              conversations. Verify availability, ownership, and entitlement status
+              with the City of Medford and SOREDI.
+            </p>
+          </footer>
+        </div>
+
+        <div id="parcel-view" hidden>
+          <button type="button" id="parcelBack" class="back-link">
+            ← Back to candidates
+          </button>
+          <h2 class="panel-title" id="parcelTitle">Parcel</h2>
+          <div class="parcel-meta" id="parcelMeta">—</div>
+
+          <dl class="parcel-attrs" id="parcelAttrs"></dl>
+
+          <details class="parcel-raw">
+            <summary>All attributes</summary>
+            <dl id="parcelAllAttrs"></dl>
+          </details>
+
+          <footer class="panel-footer">
+            <a id="parcelPdoLink" class="external" target="_blank" rel="noopener">
+              View in Jackson County PDO ↗
+            </a>
+          </footer>
+        </div>
       </aside>
     </main>
+
+    <div id="endpoints-modal" class="modal" hidden>
+      <div class="modal-card" role="dialog" aria-label="Configure data sources">
+        <header class="modal-head">
+          <div>
+            <h3>Configure data sources</h3>
+            <p class="muted">
+              Paste ArcGIS REST base URLs (without <code>/query</code>). Hit
+              <em>Test</em> to verify a service responds. Values persist on this
+              browser via <code>localStorage</code>.
+            </p>
+          </div>
+          <button type="button" id="endpoints-close" aria-label="Close">×</button>
+        </header>
+        <div id="endpoints-fields" class="endpoints-fields"></div>
+        <footer class="modal-foot">
+          <button type="button" id="endpoints-cancel" class="btn-secondary">Cancel</button>
+          <button type="button" id="endpoints-save" class="btn-primary">Save</button>
+        </footer>
+      </div>
+    </div>
+
     <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-    <script src="./app.js"></script>
+    <script type="module" src="./app.js"></script>
   </body>
 </html>
