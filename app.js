@@ -38,6 +38,36 @@ function saveEndpoints(values) {
 let endpoints = loadEndpoints();
 
 // ---------- Map ----------
+const BASEMAPS = {
+  dark: {
+    tiles: [
+      "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+      "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+      "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+      "https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+    ],
+    label: "Dark",
+  },
+  light: {
+    tiles: [
+      "https://a.basemaps.cartocdn.com/voyager/{z}/{x}/{y}.png",
+      "https://b.basemaps.cartocdn.com/voyager/{z}/{x}/{y}.png",
+      "https://c.basemaps.cartocdn.com/voyager/{z}/{x}/{y}.png",
+      "https://d.basemaps.cartocdn.com/voyager/{z}/{x}/{y}.png",
+    ],
+    label: "Light",
+  },
+  satellite: {
+    tiles: [
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    ],
+    label: "Satellite",
+    attribution: "Tiles &copy; Esri",
+  },
+};
+
+let currentBasemap = "dark";
+
 const map = new maplibregl.Map({
   container: "map",
   style: {
@@ -46,12 +76,7 @@ const map = new maplibregl.Map({
     sources: {
       basemap: {
         type: "raster",
-        tiles: [
-          "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-          "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-          "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-          "https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-        ],
+        tiles: BASEMAPS.dark.tiles,
         tileSize: 256,
         maxzoom: 19,
         attribution:
@@ -70,6 +95,32 @@ const map = new maplibregl.Map({
 
 map.addControl(new maplibregl.NavigationControl(), "top-right");
 map.addControl(new maplibregl.ScaleControl({ unit: "imperial" }), "bottom-right");
+
+function setBasemap(key) {
+  const b = BASEMAPS[key];
+  if (!b) return;
+  currentBasemap = key;
+  const src = map.getSource("basemap");
+  if (src && typeof src.setTiles === "function") {
+    src.setTiles(b.tiles);
+  } else {
+    // Fallback: rebuild the source.
+    map.removeLayer("basemap");
+    map.removeSource("basemap");
+    map.addSource("basemap", {
+      type: "raster",
+      tiles: b.tiles,
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: b.attribution || "&copy; OpenStreetMap contributors &copy; CARTO",
+    });
+    map.addLayer({ id: "basemap", type: "raster", source: "basemap" }, map.getStyle().layers[1]?.id);
+  }
+  document.querySelectorAll("[data-basemap]").forEach((el) => {
+    el.classList.toggle("active", el.dataset.basemap === key);
+  });
+  document.body.dataset.basemap = key;
+}
 
 // ---------- Distance ----------
 function haversineMiles(a, b) {
@@ -121,6 +172,7 @@ function readCriteria() {
     overlayZoning: document.getElementById("overlayZoning").checked,
     overlayPois: document.getElementById("overlayPois").checked,
     overlayParcels: document.getElementById("overlayParcels").checked,
+    overlayFloodplainLayer: document.getElementById("overlayFloodplainLayer").checked,
   };
 }
 
@@ -242,12 +294,12 @@ function ensureLayers() {
     type: "fill",
     source: "parcels",
     paint: {
-      "fill-color": "#6db4c1",
+      "fill-color": "#7fd1e0",
       "fill-opacity": [
         "case",
-        ["boolean", ["feature-state", "selected"], false], 0.35,
-        ["boolean", ["feature-state", "hover"], false], 0.12,
-        0.02,
+        ["boolean", ["feature-state", "selected"], false], 0.45,
+        ["boolean", ["feature-state", "hover"], false], 0.22,
+        0.05,
       ],
     },
     layout: { visibility: "none" },
@@ -260,42 +312,47 @@ function ensureLayers() {
       "line-color": [
         "case",
         ["boolean", ["feature-state", "selected"], false], "#e8b54a",
-        "#6db4c1",
+        "#7fd1e0",
       ],
       "line-width": [
         "case",
-        ["boolean", ["feature-state", "selected"], false], 2.5,
-        0.6,
+        ["boolean", ["feature-state", "selected"], false], 3,
+        1.2,
       ],
-      "line-opacity": 0.85,
+      "line-opacity": 0.95,
     },
     layout: { visibility: "none" },
   });
 
-  // Zoning (under parcels).
+  // Zoning (under parcels). Higher opacity + brighter color so it pops on dark.
   map.addSource("zoning", { type: "geojson", data: emptyFC() });
   map.addLayer({
     id: "zoning-fill",
     type: "fill",
     source: "zoning",
-    paint: { "fill-color": "#6db4c1", "fill-opacity": 0.15 },
+    paint: { "fill-color": "#9ae3ec", "fill-opacity": 0.28 },
     layout: { visibility: "none" },
   });
   map.addLayer({
     id: "zoning-line",
     type: "line",
     source: "zoning",
-    paint: { "line-color": "#6db4c1", "line-width": 0.5, "line-opacity": 0.5 },
+    paint: { "line-color": "#9ae3ec", "line-width": 1, "line-opacity": 0.85 },
     layout: { visibility: "none" },
   });
 
-  // City limits.
+  // City limits — bright gold thick dashed line so it's unmistakable.
   map.addSource("city-limits", { type: "geojson", data: emptyFC() });
   map.addLayer({
     id: "city-limits-line",
     type: "line",
     source: "city-limits",
-    paint: { "line-color": "#6db4c1", "line-width": 2, "line-dasharray": [3, 2] },
+    paint: {
+      "line-color": "#e8b54a",
+      "line-width": 3,
+      "line-dasharray": [4, 2],
+      "line-opacity": 0.95,
+    },
   });
 
   // Floodplain.
@@ -304,7 +361,14 @@ function ensureLayers() {
     id: "floodplain-fill",
     type: "fill",
     source: "floodplain",
-    paint: { "fill-color": "#5fa9e8", "fill-opacity": 0.18 },
+    paint: { "fill-color": "#5fa9e8", "fill-opacity": 0.35 },
+    layout: { visibility: "none" },
+  });
+  map.addLayer({
+    id: "floodplain-line",
+    type: "line",
+    source: "floodplain",
+    paint: { "line-color": "#5fa9e8", "line-width": 1, "line-opacity": 0.7 },
     layout: { visibility: "none" },
   });
 
@@ -585,9 +649,12 @@ function applyOverlayVisibility(c) {
   map.setLayoutProperty("zoning-line", "visibility", c.overlayZoning ? "visible" : "none");
   map.setLayoutProperty("parcels-fill", "visibility", c.overlayParcels ? "visible" : "none");
   map.setLayoutProperty("parcels-line", "visibility", c.overlayParcels ? "visible" : "none");
+  map.setLayoutProperty("floodplain-fill", "visibility", c.overlayFloodplainLayer ? "visible" : "none");
+  map.setLayoutProperty("floodplain-line", "visibility", c.overlayFloodplainLayer ? "visible" : "none");
 
   if (c.overlayCity) loadStaticOverlay("city-limits", endpoints.cityLimits);
   if (c.overlayZoning) loadStaticOverlay("zoning", endpoints.zoning);
+  if (c.overlayFloodplainLayer) loadStaticOverlay("floodplain", endpoints.floodplain);
   if (c.overlayParcels) loadParcelsInView();
   else clearParcelsState();
 }
@@ -814,4 +881,9 @@ form.addEventListener("change", () => run());
 map.on("load", () => {
   ensureLayers();
   run();
+});
+
+// Basemap toggle wiring.
+document.querySelectorAll("[data-basemap]").forEach((btn) => {
+  btn.addEventListener("click", () => setBasemap(btn.dataset.basemap));
 });

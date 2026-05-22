@@ -176,6 +176,10 @@
               <span>Parcels (live, zoom 13+)</span>
             </label>
             <label class="toggle">
+              <input type="checkbox" id="overlayFloodplainLayer" />
+              <span>FEMA floodplain</span>
+            </label>
+            <label class="toggle">
               <input type="checkbox" id="overlayPois" checked />
               <span>Reference points (highway, rail, airport)</span>
             </label>
@@ -194,6 +198,11 @@
 
       <section class="map-wrap">
         <div id="map"></div>
+        <div class="basemap-toggle" role="group" aria-label="Basemap">
+          <button type="button" data-basemap="dark" class="active">Dark</button>
+          <button type="button" data-basemap="light">Light</button>
+          <button type="button" data-basemap="satellite">Satellite</button>
+        </div>
         <div id="data-status" class="data-status" hidden></div>
       </section>
 
